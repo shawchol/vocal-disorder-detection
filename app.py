@@ -10,6 +10,10 @@ import pickle
 import warnings
 warnings.filterwarnings('ignore')
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['OMP_NUM_THREADS'] = '1'
+
 st.set_page_config(
     page_title="Vocal Disorder Detection",
     page_icon="🎙️",
@@ -104,11 +108,17 @@ def get_custom_objects():
 
 @st.cache_resource(show_spinner=False)
 def load_multi_model():
+    import tensorflow as tf
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
     from tensorflow.keras.models import load_model
     return load_model("best_dual_branch_overall.h5", custom_objects=get_custom_objects())
 
 @st.cache_resource(show_spinner=False)
 def load_binary_model():
+    import tensorflow as tf
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
     from tensorflow.keras.models import load_model
     return load_model("best_binary_overall.h5", custom_objects=get_custom_objects())
 
@@ -250,7 +260,7 @@ with col2:
     st.markdown('<div class="section-header">📊 Analysis Results</div>', unsafe_allow_html=True)
     if uploaded_file is not None and analyze_btn and file_bytes:
         is_multi = "Multi" in mode
-        with st.spinner("⏳ Loading model..."):
+        with st.spinner("⏳ Loading model... (first time ~60 seconds)"):
             try:
                 model  = load_multi_model() if is_multi else load_binary_model()
                 scaler = load_scaler()
@@ -261,15 +271,15 @@ with col2:
         if model_ok:
             with st.spinner("🔬 Analyzing..."):
                 try:
-                    signal    = preprocess_audio(file_bytes)
-                    X_mfcc_in = extract_mfcc(signal)[np.newaxis, ...]
+                    signal     = preprocess_audio(file_bytes)
+                    X_mfcc_in  = extract_mfcc(signal)[np.newaxis, ...]
                     X_hand_raw = extract_handcrafted(signal).reshape(1, -1)
                     X_hand_in  = scaler.transform(X_hand_raw).astype(np.float32)
-                    proba     = model.predict([X_mfcc_in, X_hand_in], verbose=0)[0]
-                    pred_idx  = int(np.argmax(proba))
-                    conf      = float(proba[pred_idx])
-                    classes   = MULTI_CLASSES if is_multi else BINARY_CLASSES
-                    pred      = classes[pred_idx]
+                    proba      = model.predict([X_mfcc_in, X_hand_in], verbose=0)[0]
+                    pred_idx   = int(np.argmax(proba))
+                    conf       = float(proba[pred_idx])
+                    classes    = MULTI_CLASSES if is_multi else BINARY_CLASSES
+                    pred       = classes[pred_idx]
                     is_healthy = pred == "Healthy"
                     card_cls   = "healthy-card" if is_healthy else "disease-card"
                     icon       = "✅" if is_healthy else "⚠️"
